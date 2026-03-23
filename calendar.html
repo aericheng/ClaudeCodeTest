@@ -137,6 +137,33 @@
     .day-dot.priority-high { background: #ef4444; }
     .day-dot.priority-medium { background: #f59e0b; }
     .day-dot.priority-low { background: #10b981; }
+    .day-dot.status-done { opacity: 0.45; text-decoration: line-through; }
+
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-weight: 500;
+      display: inline-block;
+      margin-top: 3px;
+    }
+    .status-todo  { background: #f3f4f6; color: #6b7280; }
+    .status-doing { background: #dbeafe; color: #1d4ed8; }
+    .status-done  { background: #d1fae5; color: #065f46; }
+
+    .event-title.crossed { text-decoration: line-through; color: #9ca3af; }
+
+    .status-select {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 2px 4px;
+      font-size: 0.75rem;
+      color: #374151;
+      cursor: pointer;
+      background: white;
+      flex-shrink: 0;
+      align-self: center;
+    }
 
     /* Sidebar */
     .sidebar { display: flex; flex-direction: column; gap: 1rem; }
@@ -304,6 +331,14 @@
         </select>
       </div>
       <div class="form-group">
+        <label>狀態</label>
+        <select id="ev-status">
+          <option value="todo">待辦</option>
+          <option value="doing">進行中</option>
+          <option value="done">已完成</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>備註</label>
         <textarea id="ev-desc" placeholder="可選填..."></textarea>
       </div>
@@ -335,6 +370,10 @@
   function saveEvents(evs) {
     localStorage.setItem('cal_events', JSON.stringify(evs));
   }
+
+  // ── Status ────────────────────────────────────────────
+  const STATUS_LABELS = { todo: '待辦', doing: '進行中', done: '已完成' };
+  const STATUS_CLASS  = { todo: 'status-todo', doing: 'status-doing', done: 'status-done' };
 
   // ── State ─────────────────────────────────────────────
   let events = loadEvents();
@@ -404,7 +443,8 @@
       dotsEl.className = 'day-events';
       dayEvs.slice(0,3).forEach(ev => {
         const dot = document.createElement('div');
-        dot.className = `day-dot priority-${ev.priority}`;
+        const isDone = (ev.status || 'todo') === 'done';
+        dot.className = `day-dot priority-${ev.priority}${isDone ? ' status-done' : ''}`;
         dot.textContent = (ev.time ? ev.time + ' ' : '') + ev.title;
         dotsEl.appendChild(dot);
       });
@@ -429,27 +469,40 @@
   }
 
   // ── Modal ─────────────────────────────────────────────
-  function openModal(key, dayEvs) {
-    const [y, m, d] = key.split('-');
-    document.getElementById('modal-title').textContent =
-      `${y}年${parseInt(m)}月${parseInt(d)}日 的事件`;
-    const container = document.getElementById('modal-events');
+  let modalDateKey = null;
+
+  function renderModalEvents(container, dayEvs) {
     container.innerHTML = '';
+    const colors = { high:'#ef4444', medium:'#3b82f6', low:'#10b981' };
     dayEvs.forEach(ev => {
+      const st = ev.status || 'todo';
       const item = document.createElement('div');
       item.className = 'event-item';
-      const colors = { high:'#ef4444', medium:'#3b82f6', low:'#10b981' };
       item.innerHTML = `
         <div class="event-color" style="background:${colors[ev.priority]}"></div>
         <div class="event-info">
-          <div class="event-title">${escHtml(ev.title)}</div>
+          <div class="event-title${st === 'done' ? ' crossed' : ''}">${escHtml(ev.title)}</div>
           <div class="event-date">${ev.time || '全天'}</div>
           ${ev.desc ? `<div class="event-desc">${escHtml(ev.desc)}</div>` : ''}
+          <span class="status-badge ${STATUS_CLASS[st]}">${STATUS_LABELS[st]}</span>
         </div>
+        <select class="status-select" onchange="updateStatus('${ev.id}', this.value)">
+          <option value="todo"  ${st==='todo'  ? 'selected':''}>待辦</option>
+          <option value="doing" ${st==='doing' ? 'selected':''}>進行中</option>
+          <option value="done"  ${st==='done'  ? 'selected':''}>已完成</option>
+        </select>
         <button class="del-btn" onclick="deleteEvent('${ev.id}')">✕</button>
       `;
       container.appendChild(item);
     });
+  }
+
+  function openModal(key, dayEvs) {
+    const [y, m, d] = key.split('-');
+    modalDateKey = key;
+    document.getElementById('modal-title').textContent =
+      `${y}年${parseInt(m)}月${parseInt(d)}日 的事件`;
+    renderModalEvents(document.getElementById('modal-events'), dayEvs);
     document.getElementById('modal-overlay').classList.add('open');
   }
 
@@ -473,7 +526,8 @@
       return;
     }
 
-    const ev = { id: Date.now().toString(), title, date, time, priority: prio, desc };
+    const status = document.getElementById('ev-status').value;
+    const ev = { id: Date.now().toString(), title, date, time, priority: prio, desc, status };
     events.push(ev);
     saveEvents(events);
     scheduleNotify(ev);
@@ -481,10 +535,27 @@
     document.getElementById('ev-title').value = '';
     document.getElementById('ev-time').value = '';
     document.getElementById('ev-desc').value = '';
+    document.getElementById('ev-status').value = 'todo';
 
     renderCal();
     renderList();
   };
+
+  // ── Update status ─────────────────────────────────────
+  function updateStatus(id, newStatus) {
+    const ev = events.find(e => e.id === id);
+    if (!ev) return;
+    ev.status = newStatus;
+    saveEvents(events);
+    renderCal();
+    renderList();
+    // Refresh modal if still open
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay.classList.contains('open') && modalDateKey) {
+      const dayEvs = events.filter(e => e.date === modalDateKey);
+      renderModalEvents(document.getElementById('modal-events'), dayEvs);
+    }
+  }
 
   // ── Delete event ──────────────────────────────────────
   function deleteEvent(id) {
@@ -510,17 +581,25 @@
     }
 
     const colors = { high:'#ef4444', medium:'#3b82f6', low:'#10b981' };
-    el.innerHTML = upcoming.map(ev => `
+    el.innerHTML = upcoming.map(ev => {
+      const st = ev.status || 'todo';
+      return `
       <div class="event-item">
         <div class="event-color" style="background:${colors[ev.priority]}"></div>
         <div class="event-info">
-          <div class="event-title">${escHtml(ev.title)}</div>
+          <div class="event-title${st === 'done' ? ' crossed' : ''}">${escHtml(ev.title)}</div>
           <div class="event-date">${formatDate(ev.date)}${ev.time ? ' ' + ev.time : ''}</div>
           ${ev.desc ? `<div class="event-desc">${escHtml(ev.desc)}</div>` : ''}
+          <span class="status-badge ${STATUS_CLASS[st]}">${STATUS_LABELS[st]}</span>
         </div>
+        <select class="status-select" onchange="updateStatus('${ev.id}', this.value)">
+          <option value="todo"  ${st==='todo'  ? 'selected':''}>待辦</option>
+          <option value="doing" ${st==='doing' ? 'selected':''}>進行中</option>
+          <option value="done"  ${st==='done'  ? 'selected':''}>已完成</option>
+        </select>
         <button class="del-btn" onclick="deleteEvent('${ev.id}')">✕</button>
       </div>
-    `).join('');
+    `}).join('');
   }
 
   // ── Notifications ─────────────────────────────────────
