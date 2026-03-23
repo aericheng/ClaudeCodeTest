@@ -26,8 +26,9 @@ Each app is a **single-file** HTML/CSS/JS application:
 
 - Remote: `https://github.com/aericheng/ClaudeCodeTest`
 - Branch: `master`
-- After every meaningful change: commit with a descriptive message and push to `origin master`
-- Commit message format: short imperative subject line, then a blank line and a brief body describing what and why
+- **Commit and push frequently** — after every meaningful unit of work (new feature, bug fix, significant edit), always `git add`, `git commit`, and `git push origin master`. Never leave completed work uncommitted.
+- Push after each commit so the remote is always up to date and work is never lost.
+- Commit message format: short imperative subject line (≤72 chars), blank line, then a brief body describing what changed and why.
 
 ## Code Conventions
 
